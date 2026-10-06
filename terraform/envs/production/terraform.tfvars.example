@@ -1,0 +1,21 @@
+aws_region   = "us-east-1"
+project_name = "dvop"
+
+vpc_cidr           = "10.0.0.0/16"
+single_nat_gateway = false
+
+eks_cluster_version     = "1.31"
+eks_node_instance_types = ["t3.medium"]
+eks_node_desired_size   = 2
+eks_node_min_size       = 2
+eks_node_max_size       = 5
+
+cluster_endpoint_public_access_cidrs = ["203.0.113.0/24"] # Replace with your office/VPN CIDR
+
+db_name           = "orders"
+db_username       = "orderapp"
+db_password       = "CHANGE_ME_STRONG_PASSWORD"
+db_instance_class = "db.t4g.micro"
+
+github_org  = "your-github-org"
+github_repo = "dvop"

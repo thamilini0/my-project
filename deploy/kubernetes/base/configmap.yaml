@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-service-config
+  labels:
+    app: order-service
+data:
+  NODE_ENV: production
+  SERVICE_NAME: order-service
+  PORT: "3000"

@@ -1,0 +1,16 @@
+variable "aws_region" { type = string }
+variable "project_name" { type = string }
+variable "vpc_cidr" { type = string }
+variable "single_nat_gateway" { type = bool }
+variable "eks_cluster_version" { type = string }
+variable "eks_node_instance_types" { type = list(string) }
+variable "eks_node_desired_size" { type = number }
+variable "eks_node_min_size" { type = number }
+variable "eks_node_max_size" { type = number }
+variable "cluster_endpoint_public_access_cidrs" { type = list(string) }
+variable "db_name" { type = string }
+variable "db_username" { type = string }
+variable "db_password" { type = string }
+variable "db_instance_class" { type = string }
+variable "github_org" { type = string }
+variable "github_repo" { type = string }

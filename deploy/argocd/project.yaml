@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: dvop
+  namespace: argocd
+spec:
+  description: DVOP microservices
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: order-service
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

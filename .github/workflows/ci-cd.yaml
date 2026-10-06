@@ -1,0 +1,151 @@
+name: CI/CD — order-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/order-service/**"
+      - "deploy/kubernetes/**"
+      - ".github/workflows/ci-cd.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/order-service/**"
+      - ".github/workflows/ci-cd.yaml"
+
+permissions:
+  contents: write
+  id-token: write
+  security-events: write
+
+env:
+  APP_PATH: apps/order-service
+  IMAGE_NAME: order-service
+  KUSTOMIZE_PATH: deploy/kubernetes/overlays/production
+
+jobs:
+  quality:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.APP_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ env.APP_PATH }}/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test:ci
+
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high
+        continue-on-error: false
+
+  build-scan:
+    name: Build & Scan Image
+    needs: quality
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker meta
+        id: meta
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "version=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          docker build \
+            -t "${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}" \
+            -t "${{ env.IMAGE_NAME }}:latest" \
+            ${{ env.APP_PATH }}
+
+      - name: Trivy scan (CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
+          format: table
+          exit-code: 1
+          severity: CRITICAL
+          ignore-unfixed: true
+
+  deploy:
+    name: Push ECR & GitOps Tag
+    needs: build-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      IMAGE_TAG: ${{ needs.build-scan.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebuild image for push
+        run: |
+          docker build \
+            -t "${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}" \
+            -t "${{ env.ECR_REPOSITORY }}:latest" \
+            ${{ env.APP_PATH }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push image to ECR
+        run: |
+          docker push "${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"
+          docker push "${{ env.ECR_REPOSITORY }}:latest"
+
+      - name: Update Kustomize image tag (GitOps)
+        env:
+          IMAGE_TAG: ${{ needs.build-scan.outputs.image_tag }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq kustomize || true
+          cd deploy/kubernetes/overlays/production
+          kustomize edit set image "order-service=${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}" 2>/dev/null || \
+            yq -i ".images[0].newTag = \"${IMAGE_TAG}\"" kustomization.yaml
+
+      - name: Commit manifest bump
+        env:
+          IMAGE_TAG: ${{ needs.build-scan.outputs.image_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/kubernetes/overlays/production/kustomization.yaml
+          if git diff --staged --quiet; then
+            echo "No manifest change"
+            exit 0
+          fi
+          git commit -m "deploy(order-service): image ${IMAGE_TAG}"
+          git push
+
+      - name: Verify cluster access (optional smoke)
+        env:
+          EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+        run: |
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          kubectl -n order-service rollout status deployment/order-service --timeout=300s || true

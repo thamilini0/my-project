@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: order-service
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - hpa.yaml
+  - networkpolicy.yaml
+
+commonLabels:
+  app.kubernetes.io/name: order-service
+  app.kubernetes.io/component: api
+
+images:
+  - name: order-service
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/dvop/order-service
+    newTag: latest

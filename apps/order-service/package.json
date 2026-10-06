@@ -1,0 +1,29 @@
+{
+  "name": "order-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sample order microservice",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "lint": "eslint src test",
+    "test": "node --test test/**/*.test.js",
+    "test:ci": "node --test --test-reporter=spec test/**/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "globals": "^15.14.0",
+    "supertest": "^7.0.0"
+  }
+}
